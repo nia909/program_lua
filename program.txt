@@ -1,0 +1,128 @@
+if function_name ~= 'default' and function_name ~= nil then
+	local f = contact.input_functions[function_name]
+	if f ~= nil then
+		f(contact_name)
+	end
+	return
+end
+
+contact = {}
+local switch_adres = 'http://%s/cm?cmnd=POWER+TOGGLE'
+local status_adres = 'http://%s/cm?cmnd=STATUS+8'
+
+local contact_zone = {
+	['salon'] = {
+		['ip'] = '192.168.2.141',
+		['switch_request_name'] = 'gniazdo_switch',
+		['status_request_name'] = 'gniazdo_status',
+		['contact_status'] = function(value)
+			GATE_HTTP->stan_gniazda_1 = value or GATE_HTTP->stan_gniazda_1
+			return tonumber(GATE_HTTP->stan_gniazda_1)
+		end,
+		['contact_current'] = function(value)
+			GATE_HTTP->Current = value or GATE_HTTP->Current
+			return tonumber(GATE_HTTP->Current)
+		end,
+		['contact_voltage'] = function(value)
+			GATE_HTTP->Voltage = value or GATE_HTTP->Voltage
+			return tonumber(GATE_HTTP->Voltage)
+		end,
+	
+		['button_led_on'] = function()
+			CLU->x250000186_PANEL_BUTTON_01->LedSwitchOn()
+			CLU->x250000186_PANEL_BUTTON_01->SetIconA('lamp1on')
+		end,
+		['button_led_off'] = function()
+			CLU->x250000186_PANEL_BUTTON_01->LedSwitchOff()
+			CLU->x250000186_PANEL_BUTTON_01->SetIconA('lamp1off')
+		end,
+	},
+	['kuchnia'] = {
+		['ip'] = '192.168.2.141',
+		['switch_request_name'] = 'gniazdo_switch',
+		['status_request_name'] = 'gniazdo_status',
+		['contact_status'] = function(value)
+			GATE_HTTP->stan_gniazda_2 = value or GATE_HTTP->stan_gniazda_2
+			return tonumber(GATE_HTTP->stan_gniazda_2)
+		end,
+		
+		['contact_current'] = function(value)
+			GATE_HTTP->Current2 = value or GATE_HTTP->Current2
+			return tonumber(GATE_HTTP->Current2)
+		end,
+		['contact_voltage'] = function(value)
+			GATE_HTTP->Voltage2 = value or GATE_HTTP->Voltage2
+			return tonumber(GATE_HTTP->Voltage2)
+		end,
+	
+			['button_led_on'] = function()
+			CLU->x250000186_PANEL_BUTTON_01->LedSwitchOn()
+			CLU->x250000186_PANEL_BUTTON_01->SetIconA('lamp1on')
+		end,
+		['button_led_off'] = function()
+			CLU->x250000186_PANEL_BUTTON_01->LedSwitchOff()
+			CLU->x250000186_PANEL_BUTTON_01->SetIconA('lamp1off')
+		end,
+	}
+}
+
+
+		
+function contact.switch(contact_name)
+	local link = string.format(switch_adres, contact_zone[contact_name].ip)
+	local request_name = contact_zone[contact_name].switch_request_name	
+	
+	m_http.GET_(request_name, link)
+	
+end
+
+
+
+
+function contact.status(contact_name)
+	local link = string.format(status_adres, contact_zone[contact_name].ip)
+	local request_name = contact_zone[contact_name].status_request_name
+	
+	local function handler_info(responseCode, body)
+
+		if responseCode == m_http.Code.HTTP_OK then
+			print(' Voltage: ' .. body.StatusSNS.ENERGY.Voltage .. ' Current: ' .. body.StatusSNS.ENERGY.Current) 
+			contact_zone[contact_name].contact_voltage(body.StatusSNS.ENERGY.Voltage )
+			if contact_zone[contact_name].contact_voltage() > 0 then 
+				contact_zone[contact_name].contact_status(1)
+				contact_zone[contact_name].button_led_on()
+			else
+				contact_zone[contact_name].contact_status(0)
+				contact_zone[contact_name].button_led_off() 
+			end
+			contact_zone[contact_name].contact_current(body.StatusSNS.ENERGY.Current)
+		end
+    end
+    
+    m_http.response_handler[request_name] = handler_info
+	m_http.GET_(request_name, link)
+end
+	
+	
+contact.input_functions = {
+	['switch'] = contact.switch,
+	['status'] = contact.status,
+
+}
+
+_G.switch = function(param, case_table)
+    local case = case_table[param]
+    if case then return case() end
+    local def = case_table['default']
+    return def and def() or nil
+end
+
+-- initialize global user value
+GATE_HTTP->_globals()
+
+-- new http GET/POST function librar for Grenton
+GATE_HTTP->_http_lib()
+
+GATE_HTTP->_debug_lib()
+
+GATE_HTTP->contact_lib()
